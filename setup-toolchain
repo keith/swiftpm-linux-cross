@@ -1,0 +1,318 @@
+#!/usr/bin/env python3
+
+from pathlib import Path
+from typing import Tuple
+import contextlib
+import gzip
+import json
+import multiprocessing.pool
+import os
+import shutil
+import subprocess
+import tarfile
+import tempfile
+import urllib.request
+
+_UBUNTU_MIRROR = "http://gb.archive.ubuntu.com/ubuntu"
+_FOCAL_PACKAGES = [
+    "libbrotli-dev",
+    "libc6",
+    "libc6-dev",
+    "libcurl4",
+    "libcurl4-openssl-dev",
+    "libgcc-9-dev",
+    "libgcc-s1",
+    "libicu-dev",
+    "liblzma-dev",
+    "libssl-dev",
+    "libstdc++-9-dev",
+    "libxml2-dev",
+    "linux-libc-dev",
+    "zlib1g-dev",
+]
+
+
+def _install_llvm() -> None:
+    try:
+        subprocess.check_call(
+            ["brew", "--prefix", "llvm"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except subprocess.CalledProcessError:
+        print("Installing LLVM...")
+        subprocess.check_call(["brew", "install", "llvm"])
+
+
+def _setup_toolchain_root(os: str, arch: str, swift_version: str) -> Path:
+    toolchain_dir = Path(f"toolchain-{os}-{arch}-{swift_version}")
+    if toolchain_dir.is_dir():
+        shutil.rmtree(toolchain_dir)
+    elif toolchain_dir.exists():
+        toolchain_dir.unlink()
+    if toolchain_dir.exists():
+        raise SystemExit(
+            f"error: failed to remove '{toolchain_dir}', please delete it and re-run"
+        )
+    toolchain_dir.mkdir()
+    return toolchain_dir
+
+
+def _download_extract_swift(
+    os: str, arch: str, swift_version: str, toolchain_dir: Path
+) -> Path:
+    # TODO: derive URL
+    swift_url = f"https://download.swift.org/swift-{swift_version}-release/ubuntu2004/swift-{swift_version}-RELEASE/swift-{swift_version}-RELEASE-ubuntu20.04.tar.gz"
+    swift_archive = Path(f"/tmp/swift-{os}-{arch}-{swift_version}.tar.gz")
+    if not swift_archive.exists():
+        print(f"Downloading Swift {swift_version} for {os}-{arch}...")
+        # TODO: progress reporting
+        urllib.request.urlretrieve(swift_url, swift_archive)
+
+    print("Extracting Swift...")
+    shutil.unpack_archive(swift_archive, toolchain_dir)
+    return next(toolchain_dir.glob("swift-*"))
+
+
+def _setup_swift_bin(swift_root: Path) -> Path:
+    swift_bin = swift_root / "usr" / "cross-bin"
+    swift_bin.mkdir()
+    # shutil.copy("ar", swift_bin)
+    os.symlink("/usr/bin/ar", swift_bin.absolute() / "ar")
+    llvm_root = Path(
+        subprocess.check_output(
+            ["brew", "--prefix", "llvm"],
+        )
+        .decode()
+        .strip()
+    )
+    os.symlink(llvm_root / "bin" / "ld.lld", swift_bin.absolute() / "ld.lld")
+    subprocess.check_call(
+        [
+            "swiftc",
+            "swift-autolink-extract.swift",
+            "-o",
+            swift_bin / "swift-autolink-extract",
+        ]
+    )
+    return swift_bin
+
+
+def _write_destination_file(
+    arch: str,
+    toolchain_dir: Path,
+    swift_root: Path,
+    swift_bin: Path,
+    sdk_root: Path,
+) -> Tuple[Path, Path]:
+    swift_arch = "x86_64" if arch == "amd64" else arch
+    contents = {
+        "version": 1,
+        "sdk": str(sdk_root.absolute()),
+        "toolchain-bin-dir": str(swift_bin.absolute()),
+        "target": f"{swift_arch}-unknown-linux-gnu",
+        "extra-cc-flags": ["-fPIC"],
+        "extra-cpp-flags": ["-lstdc++"],
+        "extra-swiftc-flags": [
+            "-use-ld=lld",
+            "-Xlinker",
+            "-rpath",
+            "-Xlinker",
+            "/usr/lib/swift/linux",
+            "-tools-directory",
+            str(swift_bin.absolute()),
+            "-resource-dir",
+            str((swift_root / "usr" / "lib" / "swift").absolute()),
+            "-sdk",
+            str(sdk_root.absolute()),
+        ],
+    }
+
+    destination = toolchain_dir / "destination.json"
+    with open(destination, "w") as f:
+        json.dump(contents, f, indent=4)
+
+    contents = {
+        "version": 1,
+        "sdk": str(sdk_root.absolute()),
+        "toolchain-bin-dir": str(swift_bin.absolute()),
+        "target": f"{swift_arch}-unknown-linux-gnu",
+        "extra-cc-flags": ["-fPIC"],
+        "extra-cpp-flags": ["-lstdc++"],
+        "extra-swiftc-flags": [
+            "-use-ld=lld",
+            "-Xlinker",
+            "-rpath",
+            "-Xlinker",
+            "/usr/lib/swift/linux",
+            "-tools-directory",
+            str(swift_bin.absolute()),
+            "-resource-dir",
+            str((swift_root / "usr" / "lib" / "swift_static").absolute()),
+            "-sdk",
+            str(sdk_root.absolute()),
+        ],
+    }
+
+    destination_static = toolchain_dir / "destination_static.json"
+    with open(destination_static, "w") as f:
+        json.dump(contents, f, indent=4)
+
+    return destination, destination_static
+
+
+@contextlib.contextmanager
+def restore_pwd():
+    pwd = os.getcwd()
+    try:
+        yield
+    finally:
+        os.chdir(pwd)
+
+
+def _download_and_extract_package(url: str, package_dir: Path) -> None:
+    name = url.split("/")[-1]
+    output_path = Path(f"/tmp/{name}.deb")
+    urllib.request.urlretrieve(url, output_path)
+    with tempfile.TemporaryDirectory() as dirname:
+        with restore_pwd():
+            os.chdir(dirname)
+            subprocess.check_call(["ar", "x", output_path])
+            with tarfile.open("data.tar.xz") as f:
+                f.extractall(package_dir)
+
+
+def _download_packages(os: str, arch: str, package_dir: Path) -> None:
+    package_archive = Path(f"/tmp/packages-{os}-{arch}.gz")
+    if not package_archive.exists():
+        print(f"Downloading package list for {os}-{arch}...")
+        package_url = (
+            f"{_UBUNTU_MIRROR}/dists/{os}/main/binary-{arch}/Packages.gz"
+        )
+        # TODO: progress reporting
+        urllib.request.urlretrieve(package_url, package_archive)
+
+    with gzip.open(package_archive, "rb") as f:
+        files = [
+            x
+            for x in f.read().decode().splitlines()
+            if x.startswith("Filename: ")
+        ]
+
+    package_paths = {}
+    needed_packages = set(_FOCAL_PACKAGES)
+    for filename in files:
+        if not needed_packages:
+            break
+        for package in needed_packages:
+            # Filename: pool/main/c/curl/libcurl4-openssl-dev_7.68.0-1ubuntu2_amd64.deb
+            last_component = filename.split("/")[-1]
+            if last_component.startswith(f"{package}_"):
+                package_paths[package] = filename.split(" ")[-1]
+                needed_packages.remove(package)
+                break
+
+    missing_packages = set(_FOCAL_PACKAGES) - set(package_paths.keys())
+    if missing_packages:
+        raise SystemExit(
+            "Failed to find some packages, please report this issue: {}".format(
+                " ".join(sorted(missing_packages))
+            )
+        )
+
+    pool = multiprocessing.pool.Pool()
+    results = []
+    for path in package_paths.values():
+        results.append(
+            pool.apply_async(
+                _download_and_extract_package,
+                (f"{_UBUNTU_MIRROR}/{path}", package_dir.absolute()),
+            )
+        )
+
+    pool.close()
+    pool.join()
+
+    for result in results:
+        if not result.successful():
+            raise SystemExit(f"error: {result.get()}")
+
+    _fix_package_symlinks(arch, package_dir)
+
+
+def _fix_package_symlinks(arch: str, package_dir: Path):
+    arch = "x86_64" if arch == "amd64" else arch
+    broken_libraries_dir = package_dir / "usr" / "lib" / f"{arch}-linux-gnu"
+    assert broken_libraries_dir.exists()
+    destination_dir = package_dir / "lib" / f"{arch}-linux-gnu"
+    assert destination_dir.exists()
+    for lib in broken_libraries_dir.glob("*.so"):
+        # Ignore valid symlinks or normal files
+        if not lib.is_symlink() or lib.exists():
+            continue
+
+        dest = (
+            Path(os.path.relpath(lib, destination_dir)).parent
+            / lib.readlink().name
+        )
+
+        # TODO: Ideally this would be relative to be more portable
+        dest = (destination_dir / lib.readlink().name).absolute()
+        if not dest.exists():
+            # TODO: Ideally no invalid symlinks would remain, but some do
+            continue
+
+        lib.unlink()
+        lib.symlink_to(dest)
+
+
+def _apply_static_fixups(swift_root: Path) -> None:
+    dynamic_lib_dir = swift_root / "usr" / "lib" / "swift"
+    static_lib_dir = swift_root / "usr" / "lib" / "swift_static"
+    shutil.copytree(
+        dynamic_lib_dir / "_InternalSwiftSyntaxParser",
+        static_lib_dir / "_InternalSwiftSyntaxParser",
+    )
+    shutil.copy(
+        dynamic_lib_dir / "linux" / "lib_InternalSwiftSyntaxParser.so",
+        static_lib_dir / "linux",
+    )
+    shutil.copytree(
+        dynamic_lib_dir / "_InternalSwiftScan",
+        static_lib_dir / "_InternalSwiftScan",
+    )
+    shutil.copy(
+        dynamic_lib_dir / "linux" / "lib_InternalSwiftScan.so",
+        static_lib_dir / "linux",
+    )
+
+
+def _main(os: str, arch: str, swift_version: str) -> None:
+    _install_llvm()
+    toolchain_dir = _setup_toolchain_root(os, arch, swift_version)
+    swift_root = _download_extract_swift(
+        os, arch, swift_version, toolchain_dir
+    )
+    swift_bin = _setup_swift_bin(swift_root)
+    _apply_static_fixups(swift_root)
+    sdk_root = toolchain_dir / "packages"
+    _download_packages(os, arch, sdk_root)
+    destination, static_destination = _write_destination_file(
+        arch, toolchain_dir, swift_root, swift_bin, sdk_root
+    )
+
+    print(
+        f"""\
+Done! To use run:
+
+swift build --destination {destination.absolute()}
+
+Or for static stdlib builds run:
+
+swift build --static-swift-stdlib --destination {static_destination.absolute()}\
+"""
+    )
+
+
+if __name__ == "__main__":
+    _main("focal", "amd64", "5.6.2")

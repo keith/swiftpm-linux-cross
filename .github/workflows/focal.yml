@@ -1,0 +1,19 @@
+name: Swift
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  focal-build-swiftlint:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: build swiftlint
+      run: ./ci/build-swiftlint.sh
+    - uses: actions/upload-artifact@v2
+      with:
+        name: swiftlint
+        path: swiftlint

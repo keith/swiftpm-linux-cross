@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
 from pathlib import Path
-from typing import Tuple
+from typing import List, Tuple
+import argparse
 import contextlib
 import gzip
 import json
@@ -9,11 +10,12 @@ import multiprocessing.pool
 import os
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
+import urllib.error
 import urllib.request
 
-_UBUNTU_MIRROR = "http://gb.archive.ubuntu.com/ubuntu"
 _FOCAL_PACKAGES = [
     "libbrotli-dev",
     "libc6",
@@ -30,6 +32,65 @@ _FOCAL_PACKAGES = [
     "linux-libc-dev",
     "zlib1g-dev",
 ]
+_BIONIC_PACKAGES = [
+    "libc6",
+    "libc6-dev",
+    "libcurl4",
+    "libcurl4-openssl-dev",
+    "libgcc-7-dev",
+    "libgcc1",
+    "libicu-dev",
+    "liblzma-dev",
+    "libssl-dev",
+    "libstdc++-7-dev",
+    "libunwind-dev",
+    "libxml2-dev",
+    "linux-libc-dev",
+    "zlib1g-dev",
+]
+
+
+class Arch:
+    def __init__(
+        self, id: str, swift_id: str, ubuntu_id: str, ubuntu_mirror: str
+    ):
+        self.id = id
+        self.swift_id = swift_id
+        self.ubuntu_id = ubuntu_id
+        self.ubuntu_mirror = ubuntu_mirror
+
+
+ARM64 = Arch(
+    "arm64", "aarch64", "arm64", "http://ports.ubuntu.com/ubuntu-ports"
+)
+X86_64 = Arch(
+    "x86_64", "x86_64", "amd64", "http://gb.archive.ubuntu.com/ubuntu"
+)
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--ubuntu-release",
+        choices=("bionic", "focal"),
+        default="focal",
+        help="The target Ubuntu release you will run on",
+    )
+    parser.add_argument(
+        "--arch",
+        choices=("x86_64", "arm64"),
+        default="x86_64",
+        help="The target architecture to build for",
+    )
+    parser.add_argument(
+        "--swift-version",
+        default="5.6.2",
+        help="The version of Swift you're building with and for",
+    )
+    parser.add_argument(
+        "packages", nargs="*", help="Extra OS packages your build requires"
+    )
+    return parser
 
 
 def _install_llvm() -> None:
@@ -44,8 +105,8 @@ def _install_llvm() -> None:
         subprocess.check_call(["brew", "install", "llvm"])
 
 
-def _setup_toolchain_root(os: str, arch: str, swift_version: str) -> Path:
-    toolchain_dir = Path(f"toolchain-{os}-{arch}-{swift_version}")
+def _setup_toolchain_root(os: str, arch: Arch, swift_version: str) -> Path:
+    toolchain_dir = Path(f"toolchain-{os}-{arch.id}-{swift_version}")
     if toolchain_dir.is_dir():
         shutil.rmtree(toolchain_dir)
     elif toolchain_dir.exists():
@@ -59,13 +120,25 @@ def _setup_toolchain_root(os: str, arch: str, swift_version: str) -> Path:
 
 
 def _download_extract_swift(
-    os: str, arch: str, swift_version: str, toolchain_dir: Path
+    os: str, arch: Arch, swift_version: str, toolchain_dir: Path
 ) -> Path:
-    # TODO: derive URL
-    swift_url = f"https://download.swift.org/swift-{swift_version}-release/ubuntu2004/swift-{swift_version}-RELEASE/swift-{swift_version}-RELEASE-ubuntu20.04.tar.gz"
-    swift_archive = Path(f"/tmp/swift-{os}-{arch}-{swift_version}.tar.gz")
+    if os == "focal":
+        v1 = "ubuntu2004"
+        v2 = "ubuntu20.04"
+    elif os == "bionic":
+        v1 = "ubuntu1804"
+        v2 = "ubuntu18.04"
+    else:
+        raise SystemExit(f"error: unsupported os: {os}")
+
+    arch_suffix = ""
+    if arch.id == "arm64":
+        arch_suffix = "-aarch64"
+
+    swift_url = f"https://download.swift.org/swift-{swift_version}-release/{v1}{arch_suffix}/swift-{swift_version}-RELEASE/swift-{swift_version}-RELEASE-{v2}{arch_suffix}.tar.gz"
+    swift_archive = Path(f"/tmp/swift-{os}-{arch.id}-{swift_version}.tar.gz")
     if not swift_archive.exists():
-        print(f"Downloading Swift {swift_version} for {os}-{arch}...")
+        print(f"Downloading Swift {swift_version} for {os}-{arch.id}...")
         # TODO: progress reporting
         urllib.request.urlretrieve(swift_url, swift_archive)
 
@@ -99,18 +172,17 @@ def _setup_swift_bin(swift_root: Path) -> Path:
 
 
 def _write_destination_file(
-    arch: str,
+    arch: Arch,
     toolchain_dir: Path,
     swift_root: Path,
     swift_bin: Path,
     sdk_root: Path,
 ) -> Tuple[Path, Path]:
-    swift_arch = "x86_64" if arch == "amd64" else arch
     contents = {
         "version": 1,
         "sdk": str(sdk_root.absolute()),
         "toolchain-bin-dir": str(swift_bin.absolute()),
-        "target": f"{swift_arch}-unknown-linux-gnu",
+        "target": f"{arch.swift_id}-unknown-linux-gnu",
         "extra-cc-flags": ["-fPIC"],
         "extra-cpp-flags": ["-lstdc++"],
         "extra-swiftc-flags": [
@@ -136,7 +208,7 @@ def _write_destination_file(
         "version": 1,
         "sdk": str(sdk_root.absolute()),
         "toolchain-bin-dir": str(swift_bin.absolute()),
-        "target": f"{swift_arch}-unknown-linux-gnu",
+        "target": f"{arch.swift_id}-unknown-linux-gnu",
         "extra-cc-flags": ["-fPIC"],
         "extra-cpp-flags": ["-lstdc++"],
         "extra-swiftc-flags": [
@@ -170,10 +242,19 @@ def restore_pwd():
         os.chdir(pwd)
 
 
-def _download_and_extract_package(url: str, package_dir: Path) -> None:
+def _download_and_extract_package(
+    name: str, url: str, package_dir: Path
+) -> None:
     name = url.split("/")[-1]
     output_path = Path(f"/tmp/{name}.deb")
-    urllib.request.urlretrieve(url, output_path)
+    try:
+        urllib.request.urlretrieve(url, output_path)
+    except urllib.error.HTTPError as e:
+        print(
+            f"error: failed to download {name} from {url}: {e}",
+            file=sys.stderr,
+        )
+        raise
     with tempfile.TemporaryDirectory() as dirname:
         with restore_pwd():
             os.chdir(dirname)
@@ -182,13 +263,13 @@ def _download_and_extract_package(url: str, package_dir: Path) -> None:
                 f.extractall(package_dir)
 
 
-def _download_packages(os: str, arch: str, package_dir: Path) -> None:
-    package_archive = Path(f"/tmp/packages-{os}-{arch}.gz")
+def _download_packages(
+    os: str, arch: Arch, packages: List[str], package_dir: Path
+) -> None:
+    package_archive = Path(f"/tmp/packages-{os}-{arch.id}.gz")
     if not package_archive.exists():
-        print(f"Downloading package list for {os}-{arch}...")
-        package_url = (
-            f"{_UBUNTU_MIRROR}/dists/{os}/main/binary-{arch}/Packages.gz"
-        )
+        print(f"Downloading package list for {os}-{arch.id}...")
+        package_url = f"{arch.ubuntu_mirror}/dists/{os}/main/binary-{arch.ubuntu_id}/Packages.gz"
         # TODO: progress reporting
         urllib.request.urlretrieve(package_url, package_archive)
 
@@ -199,8 +280,17 @@ def _download_packages(os: str, arch: str, package_dir: Path) -> None:
             if x.startswith("Filename: ")
         ]
 
+    if os == "focal":
+        os_packages = _FOCAL_PACKAGES
+    elif os == "bionic":
+        os_packages = _BIONIC_PACKAGES
+    else:
+        raise SystemExit(f"error: unsupported os: {os}")
+
+    os_packages += packages
+
     package_paths = {}
-    needed_packages = set(_FOCAL_PACKAGES)
+    needed_packages = set(os_packages)
     for filename in files:
         if not needed_packages:
             break
@@ -212,7 +302,7 @@ def _download_packages(os: str, arch: str, package_dir: Path) -> None:
                 needed_packages.remove(package)
                 break
 
-    missing_packages = set(_FOCAL_PACKAGES) - set(package_paths.keys())
+    missing_packages = set(os_packages) - set(package_paths.keys())
     if missing_packages:
         raise SystemExit(
             "Failed to find some packages, please report this issue: {}".format(
@@ -222,11 +312,11 @@ def _download_packages(os: str, arch: str, package_dir: Path) -> None:
 
     pool = multiprocessing.pool.Pool()
     results = []
-    for path in package_paths.values():
+    for name, path in package_paths.items():
         results.append(
             pool.apply_async(
                 _download_and_extract_package,
-                (f"{_UBUNTU_MIRROR}/{path}", package_dir.absolute()),
+                (name, f"{arch.ubuntu_mirror}/{path}", package_dir.absolute()),
             )
         )
 
@@ -237,24 +327,28 @@ def _download_packages(os: str, arch: str, package_dir: Path) -> None:
         if not result.successful():
             raise SystemExit(f"error: {result.get()}")
 
-    _fix_package_symlinks(arch, package_dir)
+    broken_libraries_dir = (
+        package_dir / "usr" / "lib" / f"{arch.swift_id}-linux-gnu"
+    )
+    destination_dir = package_dir / "lib" / f"{arch.swift_id}-linux-gnu"
+    _fix_package_symlinks(broken_libraries_dir, destination_dir)
+    broken_libraries_dir = next(
+        (
+            package_dir / "usr" / "lib" / "gcc" / f"{arch.swift_id}-linux-gnu"
+        ).glob("*")
+    )
+    _fix_package_symlinks(broken_libraries_dir, broken_libraries_dir)
 
 
-def _fix_package_symlinks(arch: str, package_dir: Path):
-    arch = "x86_64" if arch == "amd64" else arch
-    broken_libraries_dir = package_dir / "usr" / "lib" / f"{arch}-linux-gnu"
+def _fix_package_symlinks(
+    broken_libraries_dir: Path, destination_dir: Path
+) -> None:
     assert broken_libraries_dir.exists()
-    destination_dir = package_dir / "lib" / f"{arch}-linux-gnu"
     assert destination_dir.exists()
-    for lib in broken_libraries_dir.glob("*.so"):
+    for lib in broken_libraries_dir.glob("*.so*"):
         # Ignore valid symlinks or normal files
         if not lib.is_symlink() or lib.exists():
             continue
-
-        dest = (
-            Path(os.path.relpath(lib, destination_dir)).parent
-            / lib.readlink().name
-        )
 
         # TODO: Ideally this would be relative to be more portable
         dest = (destination_dir / lib.readlink().name).absolute()
@@ -287,7 +381,9 @@ def _apply_static_fixups(swift_root: Path) -> None:
     )
 
 
-def _main(os: str, arch: str, swift_version: str) -> None:
+def _main(
+    os: str, arch: Arch, swift_version: str, packages: List[str]
+) -> None:
     _install_llvm()
     toolchain_dir = _setup_toolchain_root(os, arch, swift_version)
     swift_root = _download_extract_swift(
@@ -296,7 +392,7 @@ def _main(os: str, arch: str, swift_version: str) -> None:
     swift_bin = _setup_swift_bin(swift_root)
     _apply_static_fixups(swift_root)
     sdk_root = toolchain_dir / "packages"
-    _download_packages(os, arch, sdk_root)
+    _download_packages(os, arch, packages, sdk_root)
     destination, static_destination = _write_destination_file(
         arch, toolchain_dir, swift_root, swift_bin, sdk_root
     )
@@ -315,4 +411,17 @@ swift build --static-swift-stdlib --destination {static_destination.absolute()}\
 
 
 if __name__ == "__main__":
-    _main("focal", "amd64", "5.6.2")
+    args = _build_parser().parse_args()
+    if args.arch == "x86_64":
+        arch = X86_64
+    elif args.arch == "arm64":
+        arch = ARM64
+    else:
+        raise SystemExit(f"error: invalid arch: {args.arch}")
+
+    if args.arch == "arm64" and args.ubuntu_release == "bionic":
+        raise SystemExit(
+            f"error: Swift didn't vendor arm64 toolchains until Ubuntu Focal"
+        )
+
+    _main(args.ubuntu_release, arch, args.swift_version, args.packages)

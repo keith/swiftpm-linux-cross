@@ -1,10 +1,13 @@
-name: Swift
+name: focal
 
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  schedule:
+    # Every Wednesday at 11:03 UTC.
+    - cron: '3 11 * * 3'
 
 jobs:
   focal-build-swiftlint:
@@ -17,3 +20,13 @@ jobs:
       with:
         name: swiftlint
         path: swiftlint
+  focal-run-swiftlint:
+    needs: focal-build-swiftlint
+    runs-on: ubuntu-latest
+    container: swift:5.6.2-focal
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/download-artifact@v3
+      with:
+        name: swiftlint
+    - run: ./swiftlint

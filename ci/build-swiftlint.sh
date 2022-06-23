@@ -4,7 +4,7 @@ set -euo pipefail
 set -x
 
 wget https://download.swift.org/swift-5.6.2-release/xcode/swift-5.6.2-RELEASE/swift-5.6.2-RELEASE-osx.pkg
-installer -target ~ -pkg swift-5.6.2-RELEASE-osx.pkg
+installer -target CurrentUserHomeDirectory -pkg swift-5.6.2-RELEASE-osx.pkg
 
 toolchain_id=$(/usr/libexec/PlistBuddy -c "print :CFBundleIdentifier" ~/Library/Developer/Toolchains/swift-latest.xctoolchain/Info.plist)
 

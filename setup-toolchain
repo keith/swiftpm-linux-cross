@@ -150,7 +150,6 @@ def _download_extract_swift(
 def _setup_swift_bin(swift_root: Path) -> Path:
     swift_bin = swift_root / "usr" / "cross-bin"
     swift_bin.mkdir()
-    # shutil.copy("ar", swift_bin)
     os.symlink("/usr/bin/ar", swift_bin.absolute() / "ar")
     llvm_root = Path(
         subprocess.check_output(

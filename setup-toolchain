@@ -420,7 +420,7 @@ if __name__ == "__main__":
 
     if args.arch == "arm64" and args.ubuntu_release == "bionic":
         raise SystemExit(
-            f"error: Swift didn't vendor arm64 toolchains until Ubuntu Focal"
+            f"error: Swift didn't vendor arm64 toolchains until Ubuntu Focal, either use Focal or target x86_64"
         )
 
     _main(args.ubuntu_release, arch, args.swift_version, args.packages)

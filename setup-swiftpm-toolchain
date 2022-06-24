@@ -162,7 +162,7 @@ def _setup_swift_bin(swift_root: Path) -> Path:
     subprocess.check_call(
         [
             "swiftc",
-            "swift-autolink-extract.swift",
+            Path(__file__).resolve().parent / "swift-autolink-extract.swift",
             "-o",
             swift_bin / "swift-autolink-extract",
         ]

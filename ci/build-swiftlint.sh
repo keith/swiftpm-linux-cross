@@ -8,7 +8,7 @@ readonly arch=$2
 
 toolchain_id=$(./ci/install-macos-toolchain.sh)
 
-./setup-toolchain --ubuntu-release "$os" --arch "$arch"
+./setup-swiftpm-toolchain --ubuntu-release "$os" --arch "$arch"
 readonly destination=$PWD/toolchain-$os-$arch-5.6.2/destination.json
 readonly binary_path=$PWD/swiftlint
 

@@ -22,7 +22,7 @@ jobs:
       run: ./ci/build-swiftlint.sh bionic x86_64
     - uses: actions/upload-artifact@v2
       with:
-        name: swiftlint
+        name: swiftlint-bionic
         path: swiftlint
   bionic-run-swiftlint:
     needs: bionic-build-swiftlint
@@ -32,7 +32,7 @@ jobs:
     - uses: actions/checkout@v3
     - uses: actions/download-artifact@v3
       with:
-        name: swiftlint
+        name: swiftlint-bionic
     - run: chmod +x ./swiftlint
     - run: ./swiftlint
   bionic-build-swiftlint-static:
@@ -43,7 +43,7 @@ jobs:
       run: ./ci/build-swiftlint-static.sh bionic x86_64
     - uses: actions/upload-artifact@v2
       with:
-        name: swiftlint
+        name: swiftlint-bionic-static
         path: swiftlint
     - uses: actions/upload-artifact@v2
       with:
@@ -60,7 +60,7 @@ jobs:
     - uses: actions/checkout@v3
     - uses: actions/download-artifact@v3
       with:
-        name: swiftlint
+        name: swiftlint-bionic-static
     - uses: actions/download-artifact@v3
       with:
         name: lib_InternalSwiftSyntaxParser

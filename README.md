@@ -83,3 +83,9 @@ with the toolchain:
 
 This path varies either in `/Library/Developer/Toolchains` or
 `~/Library/Developer/Toolchains` depending on how you install it.
+
+## References
+
+- [This script][script] is outdated but is a useful reference
+
+[script]: https://github.com/apple/swift-package-manager/blob/401640a3d1553ba1a340f9b53e40b3c7442b5452/Utilities/build_ubuntu_cross_compilation_toolchain

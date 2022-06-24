@@ -47,8 +47,12 @@ jobs:
         path: swiftlint
     - uses: actions/upload-artifact@v2
       with:
-        name: lib
+        name: lib_InternalSwiftSyntaxParser
         path: ./toolchain-bionic-x86_64-5.6.2/swift-5.6.2-RELEASE-ubuntu18.04/usr/lib/swift_static/linux/lib_InternalSwiftSyntaxParser.so
+    - uses: actions/upload-artifact@v2
+      with:
+        name: libBlocksRuntime
+        path: ./toolchain-bionic-x86_64-5.6.2/swift-5.6.2-RELEASE-ubuntu18.04/usr/lib/swift/linux/libBlocksRuntime.so
   bionic-run-swiftlint-static:
     needs: bionic-build-swiftlint-static
     runs-on: ubuntu-18.04
@@ -59,7 +63,11 @@ jobs:
         name: swiftlint
     - uses: actions/download-artifact@v3
       with:
-        name: lib
+        name: lib_InternalSwiftSyntaxParser
+        path: /tmp
+    - uses: actions/download-artifact@v3
+      with:
+        name: libBlocksRuntime
         path: /tmp
     - run: chmod +x ./swiftlint
     - run: LD_LIBRARY_PATH=/tmp ./swiftlint

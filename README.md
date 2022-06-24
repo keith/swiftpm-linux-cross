@@ -42,6 +42,19 @@ options:
 Currently this only supports targeting Ubuntu, but it should be extended
 to support more operating systems.
 
+## Installation
+
+### With [homebrew](https://brew.sh)
+
+```
+brew install keith/formulae/swiftpm-linux-cross
+```
+
+### Manually
+
+1. Clone this repo
+2. Run any `setup-swiftpm-toolchains` inside the repo
+
 ## Matching Swift Versions
 
 To use this your local version of Swift much match the version of Swift

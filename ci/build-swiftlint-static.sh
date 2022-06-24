@@ -16,5 +16,5 @@ cd "$(mktemp -d)"
 git clone --branch ks/switch-to-swiftpm-conditional-dependencies-api --recursive --depth 1 https://github.com/realm/SwiftLint.git
 cd SwiftLint
 
-TOOLCHAINS="$toolchain_id" swift build --destination "$destination" --static-swift-stdlib -Xlinker -lCFURLSessionInterface -Xlinker -lCFXMLInterface -Xlinker -lcurl -Xlinker -lxml2
+TOOLCHAINS="$toolchain_id" swift build --destination "$destination" --static-swift-stdlib -Xlinker -lCFURLSessionInterface -Xlinker -lCFXMLInterface -Xlinker -lcurl -Xlinker -lxml2  -Xlinker -lz -Xlinker -llzma -Xlinker -licuuc -Xlinker -licudata
 cp ./.build/debug/swiftlint "$binary_path"

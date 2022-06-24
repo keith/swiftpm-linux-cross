@@ -9,7 +9,7 @@ container.
 ## Usage
 
 ```sh
-$ ./setup-toolchain
+$ ./setup-swiftpm-toolchain
 Done! To use run:
 
 swift build --destination /Users/ksmiley/dev/swiftpm-linux-cross/toolchain-focal-x86_64-5.6.2/destination.json
@@ -23,8 +23,8 @@ See the help to customize the OS, architecture, Swift version, or
 provide your own system package dependencies.
 
 ```sh
-$ ./setup-toolchain --help
-usage: setup-toolchain [-h] [--ubuntu-release {bionic,focal}] [--arch {x86_64,arm64}] [--swift-version SWIFT_VERSION] [packages ...]
+$ ./setup-swiftpm-toolchain --help
+usage: setup-swiftpm-toolchain [-h] [--ubuntu-release {bionic,focal}] [--arch {x86_64,arm64}] [--swift-version SWIFT_VERSION] [packages ...]
 
 positional arguments:
   packages              Extra OS packages your build requires

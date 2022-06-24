@@ -1,0 +1,87 @@
+name: focal
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    # Every Wednesday at 11:03 UTC.
+    - cron: '3 11 * * 3'
+
+jobs:
+  focal-build-swiftlint:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: build swiftlint
+      run: ./ci/build-swiftlint.sh focal x86_64
+    - uses: actions/upload-artifact@v2
+      with:
+        name: swiftlint
+        path: swiftlint
+  focal-run-swiftlint:
+    needs: focal-build-swiftlint
+    runs-on: ubuntu-20.04
+    container: swift:5.6.2-focal
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/download-artifact@v3
+      with:
+        name: swiftlint
+    - run: chmod +x ./swiftlint
+    - run: ./swiftlint
+  focal-build-swiftlint-static:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: build swiftlint
+      run: ./ci/build-swiftlint-static.sh focal x86_64
+    - uses: actions/upload-artifact@v2
+      with:
+        name: swiftlint
+        path: swiftlint
+    - uses: actions/upload-artifact@v2
+      with:
+        name: lib_InternalSwiftSyntaxParser
+        path: ./toolchain-focal-x86_64-5.6.2/swift-5.6.2-RELEASE-ubuntu20.04/usr/lib/swift_static/linux/lib_InternalSwiftSyntaxParser.so
+    - uses: actions/upload-artifact@v2
+      with:
+        name: libBlocksRuntime
+        path: ./toolchain-focal-x86_64-5.6.2/swift-5.6.2-RELEASE-ubuntu20.04/usr/lib/swift/linux/libBlocksRuntime.so
+  focal-run-swiftlint-static:
+    needs: focal-build-swiftlint-static
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/download-artifact@v3
+      with:
+        name: swiftlint
+    - uses: actions/download-artifact@v3
+      with:
+        name: lib_InternalSwiftSyntaxParser
+        path: /tmp
+    - uses: actions/download-artifact@v3
+      with:
+        name: libBlocksRuntime
+        path: /tmp
+    - run: chmod +x ./swiftlint
+    - run: LD_LIBRARY_PATH=/tmp ./swiftlint
+  # arm binaries aren't tested because of x86_64 CI machines on GitHub actions.
+  # Hopefully building is good enough
+  focal-build-swiftlint-arm:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: build swiftlint
+      run: ./ci/build-swiftlint.sh focal arm64
+  focal-build-swiftlint-static-arm:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: build swiftlint
+      run: ./ci/build-swiftlint-static.sh focal arm64

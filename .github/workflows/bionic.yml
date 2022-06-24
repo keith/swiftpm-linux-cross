@@ -1,0 +1,73 @@
+name: bionic
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    # Every Wednesday at 11:03 UTC.
+    - cron: '3 11 * * 3'
+
+jobs:
+  bionic-build-swiftlint:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: build swiftlint
+      run: ./ci/build-swiftlint.sh bionic x86_64
+    - uses: actions/upload-artifact@v2
+      with:
+        name: swiftlint
+        path: swiftlint
+  bionic-run-swiftlint:
+    needs: bionic-build-swiftlint
+    runs-on: ubuntu-18.04
+    container: swift:5.6.2-bionic
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/download-artifact@v3
+      with:
+        name: swiftlint
+    - run: chmod +x ./swiftlint
+    - run: ./swiftlint
+  bionic-build-swiftlint-static:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: build swiftlint
+      run: ./ci/build-swiftlint-static.sh bionic x86_64
+    - uses: actions/upload-artifact@v2
+      with:
+        name: swiftlint
+        path: swiftlint
+    - uses: actions/upload-artifact@v2
+      with:
+        name: lib_InternalSwiftSyntaxParser
+        path: ./toolchain-bionic-x86_64-5.6.2/swift-5.6.2-RELEASE-ubuntu18.04/usr/lib/swift_static/linux/lib_InternalSwiftSyntaxParser.so
+    - uses: actions/upload-artifact@v2
+      with:
+        name: libBlocksRuntime
+        path: ./toolchain-bionic-x86_64-5.6.2/swift-5.6.2-RELEASE-ubuntu18.04/usr/lib/swift/linux/libBlocksRuntime.so
+  bionic-run-swiftlint-static:
+    needs: bionic-build-swiftlint-static
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/download-artifact@v3
+      with:
+        name: swiftlint
+    - uses: actions/download-artifact@v3
+      with:
+        name: lib_InternalSwiftSyntaxParser
+        path: /tmp
+    - uses: actions/download-artifact@v3
+      with:
+        name: libBlocksRuntime
+        path: /tmp
+    - run: chmod +x ./swiftlint
+    - run: LD_LIBRARY_PATH=/tmp ./swiftlint

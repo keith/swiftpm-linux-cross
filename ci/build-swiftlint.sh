@@ -3,13 +3,15 @@
 set -euo pipefail
 set -x
 
+readonly os=$1
+
 wget https://download.swift.org/swift-5.6.2-release/xcode/swift-5.6.2-RELEASE/swift-5.6.2-RELEASE-osx.pkg
 installer -target CurrentUserHomeDirectory -pkg swift-5.6.2-RELEASE-osx.pkg
 
 toolchain_id=$(/usr/libexec/PlistBuddy -c "print :CFBundleIdentifier" ~/Library/Developer/Toolchains/swift-latest.xctoolchain/Info.plist)
 
-./setup-toolchain
-readonly destination=$PWD/toolchain-focal-x86_64-5.6.2/destination.json
+./setup-toolchain --ubuntu-release "$os"
+readonly destination=$PWD/toolchain-$os-x86_64-5.6.2/destination.json
 readonly binary_path=$PWD/swiftlint
 
 cd "$(mktemp -d)"

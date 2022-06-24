@@ -1,4 +1,4 @@
-name: focal
+name: bionic
 
 on:
   push:
@@ -10,20 +10,20 @@ on:
     - cron: '3 11 * * 3'
 
 jobs:
-  focal-build-swiftlint:
+  bionic-build-swiftlint:
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v3
     - name: build swiftlint
-      run: ./ci/build-swiftlint.sh focal
+      run: ./ci/build-swiftlint.sh bionic
     - uses: actions/upload-artifact@v2
       with:
         name: swiftlint
         path: swiftlint
-  focal-run-swiftlint:
-    needs: focal-build-swiftlint
-    runs-on: ubuntu-20.04
-    container: swift:5.6.2-focal
+  bionic-run-swiftlint:
+    needs: bionic-build-swiftlint
+    runs-on: ubuntu-18.04
+    container: swift:5.6.2-bionic
     steps:
     - uses: actions/checkout@v3
     - uses: actions/download-artifact@v3

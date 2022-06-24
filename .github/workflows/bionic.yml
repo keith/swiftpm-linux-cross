@@ -60,6 +60,6 @@ jobs:
     - uses: actions/download-artifact@v3
       with:
         name: lib
-        path: /usr/lib/swift/linux
+        path: /tmp
     - run: chmod +x ./swiftlint
-    - run: ./swiftlint
+    - run: LD_LIBRARY_PATH=/tmp ./swiftlint

@@ -60,9 +60,9 @@ jobs:
     - uses: actions/download-artifact@v3
       with:
         name: lib
-        path: /usr/lib/swift/linux
+        path: /tmp
     - run: chmod +x ./swiftlint
-    - run: ./swiftlint
+    - run: LD_LIBRARY_PATH=/tmp ./swiftlint
   # arm binaries aren't tested because of x86_64 CI machines on GitHub actions.
   # Hopefully building is good enough
   focal-build-swiftlint-arm:

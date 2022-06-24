@@ -4,10 +4,11 @@ set -euo pipefail
 set -x
 
 readonly os=$1
+readonly arch=$2
 
 toolchain_id=$(./ci/install-macos-toolchain.sh)
 
-./setup-toolchain --ubuntu-release "$os"
+./setup-toolchain --ubuntu-release "$os" --arch "$arch"
 readonly destination=$PWD/toolchain-$os-x86_64-5.6.2/destination.json
 readonly binary_path=$PWD/swiftlint
 

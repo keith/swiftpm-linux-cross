@@ -15,7 +15,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: build swiftlint
-      run: ./ci/build-swiftlint.sh focal
+      run: ./ci/build-swiftlint.sh focal x86_64
     - uses: actions/upload-artifact@v2
       with:
         name: swiftlint
@@ -36,7 +36,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: build swiftlint
-      run: ./ci/build-swiftlint-static.sh focal
+      run: ./ci/build-swiftlint-static.sh focal x86_64
     - uses: actions/upload-artifact@v2
       with:
         name: swiftlint
@@ -59,3 +59,17 @@ jobs:
         path: /usr/lib/swift/linux
     - run: chmod +x ./swiftlint
     - run: ./swiftlint
+  # arm binaries aren't tested because of x86_64 CI machines on GitHub actions.
+  # Hopefully building is good enough
+  focal-build-swiftlint-arm:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: build swiftlint
+      run: ./ci/build-swiftlint.sh focal arm64
+  focal-build-swiftlint-static-arm:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: build swiftlint
+      run: ./ci/build-swiftlint-static.sh focal arm64

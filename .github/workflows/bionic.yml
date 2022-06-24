@@ -53,6 +53,14 @@ jobs:
       with:
         name: libBlocksRuntime
         path: ./toolchain-bionic-x86_64-5.6.2/swift-5.6.2-RELEASE-ubuntu18.04/usr/lib/swift/linux/libBlocksRuntime.so
+    - uses: actions/upload-artifact@v2
+      with:
+        name: libdispatch
+        path: ./toolchain-bionic-x86_64-5.6.2/swift-5.6.2-RELEASE-ubuntu18.04/usr/lib/swift/linux/libdispatch.so
+    - uses: actions/upload-artifact@v2
+      with:
+        name: libsourcekitdInProc
+        path: ./toolchain-bionic-x86_64-5.6.2/swift-5.6.2-RELEASE-ubuntu18.04/usr/lib/libsourcekitdInProc.so
   bionic-run-swiftlint-static:
     needs: bionic-build-swiftlint-static
     runs-on: ubuntu-18.04
@@ -67,7 +75,15 @@ jobs:
         path: /tmp
     - uses: actions/download-artifact@v3
       with:
+        name: libdispatch
+        path: /tmp
+    - uses: actions/download-artifact@v3
+      with:
         name: libBlocksRuntime
+        path: /tmp
+    - uses: actions/download-artifact@v3
+      with:
+        name: libsourcekitdInProc
         path: /tmp
     - run: chmod +x ./swiftlint
     - run: LD_LIBRARY_PATH=/tmp ./swiftlint

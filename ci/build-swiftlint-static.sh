@@ -16,4 +16,4 @@ git clone --branch ks/switch-to-swiftpm-conditional-dependencies-api --recursive
 cd SwiftLint
 
 TOOLCHAINS="$toolchain_id" swift build --destination "$destination" --static-swift-stdlib -c release -Xlinker -lCFURLSessionInterface -Xlinker -lCFXMLInterface -Xlinker -lcurl -Xlinker -lxml2
-cp ./.build/debug/swiftlint "$binary_path"
+cp ./.build/release/swiftlint "$binary_path"

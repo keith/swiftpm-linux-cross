@@ -47,19 +47,19 @@ jobs:
         path: swiftlint
     - uses: actions/upload-artifact@v2
       with:
-        name: lib_InternalSwiftSyntaxParser
+        name: lib_InternalSwiftSyntaxParser-focal
         path: ./toolchain-focal-x86_64-5.6.2/swift-5.6.2-RELEASE-ubuntu20.04/usr/lib/swift_static/linux/lib_InternalSwiftSyntaxParser.so
     - uses: actions/upload-artifact@v2
       with:
-        name: libBlocksRuntime
+        name: libBlocksRuntime-focal
         path: ./toolchain-focal-x86_64-5.6.2/swift-5.6.2-RELEASE-ubuntu20.04/usr/lib/swift/linux/libBlocksRuntime.so
     - uses: actions/upload-artifact@v2
       with:
-        name: libdispatch
+        name: libdispatch-focal
         path: ./toolchain-focal-x86_64-5.6.2/swift-5.6.2-RELEASE-ubuntu20.04/usr/lib/swift/linux/libdispatch.so
     - uses: actions/upload-artifact@v2
       with:
-        name: libsourcekitdInProc
+        name: libsourcekitdInProc-focal
         path: ./toolchain-focal-x86_64-5.6.2/swift-5.6.2-RELEASE-ubuntu20.04/usr/lib/libsourcekitdInProc.so
   focal-run-swiftlint-static:
     needs: focal-build-swiftlint-static
@@ -71,19 +71,19 @@ jobs:
         name: swiftlint-focal-static
     - uses: actions/download-artifact@v3
       with:
-        name: lib_InternalSwiftSyntaxParser
+        name: lib_InternalSwiftSyntaxParser-focal
         path: /tmp
     - uses: actions/download-artifact@v3
       with:
-        name: libdispatch
+        name: libdispatch-focal
         path: /tmp
     - uses: actions/download-artifact@v3
       with:
-        name: libBlocksRuntime
+        name: libBlocksRuntime-focal
         path: /tmp
     - uses: actions/download-artifact@v3
       with:
-        name: libsourcekitdInProc
+        name: libsourcekitdInProc-focal
         path: /tmp
     - run: chmod +x ./swiftlint
     - run: LD_LIBRARY_PATH=/tmp ./swiftlint

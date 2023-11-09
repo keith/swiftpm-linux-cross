@@ -6,6 +6,13 @@ Package Manager. This can be useful for building your release binaries
 on your host machine instead of in a potentially slower VM or docker
 container.
 
+## Replaced by [swift-sdk-generator](https://github.com/apple/swift-sdk-generator)
+
+This repo might still be a useful example if you need to manage this
+yourself, but moving forward you should use the new
+[swift-sdk-generator](https://github.com/apple/swift-sdk-generator)
+project instead.
+
 ## Usage
 
 ```sh
